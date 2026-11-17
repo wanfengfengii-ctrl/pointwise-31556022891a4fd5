@@ -2,10 +2,12 @@ from .query_model import QueryError, has_aggregate
 from .schemas import valid_name, value_matches
 
 
-def validate_query_json(query, level=0):
+def validate_query_json(query, level=0, allow_lateral=False):
     if level > 2 or type(query) is not dict:
         raise QueryError("query must be an object; at most two nested scalar levels")
     allowed = {"from", "as", "select", "where", "group_by", "having"}
+    if allow_lateral and level == 0:
+        allowed = allowed | {"lateral"}
     if set(query) - allowed or not {"from", "as", "select"} <= set(query):
         raise QueryError("invalid query fields")
     if not valid_name(query["from"]) or not valid_name(query["as"]):
@@ -21,7 +23,25 @@ def validate_query_json(query, level=0):
         names.add(output["as"])
     if "group_by" in query and type(query["group_by"]) is not list:
         raise QueryError("group_by must be a list")
+    if "lateral" in query:
+        _validate_lateral_shape(query)
     return query
+
+
+def _validate_lateral_shape(query):
+    if "group_by" in query or "having" in query:
+        raise QueryError("a lateral top-level query may not group or filter groups")
+    lateral = query["lateral"]
+    if type(lateral) is not dict or set(lateral) != {"as", "mode", "query"}:
+        raise QueryError("lateral requires exactly as, mode and query")
+    if not valid_name(lateral["as"]):
+        raise QueryError("invalid lateral alias")
+    if lateral["as"] == query["as"]:
+        raise QueryError("lateral alias must differ from the top-level alias")
+    if lateral["mode"] not in ("inner", "left"):
+        raise QueryError("lateral mode must be inner or left")
+    if type(lateral["query"]) is not dict:
+        raise QueryError("lateral query must be an object")
 
 
 def validate_expression_types(op, args):

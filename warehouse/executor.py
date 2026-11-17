@@ -39,9 +39,14 @@ class QueryExecutor:
             if not batch:
                 break
             for row in batch:
-                frame = RowFrame(plan.scope_id, row.occurrence, row.values)
-                if plan.where is None or evaluate(plan.where, frame) is True:
-                    accepted.append(frame)
+                left = RowFrame(plan.scope_id, row.occurrence, row.values)
+                if plan.lateral is None:
+                    frames = (left,)
+                else:
+                    frames = self.expand(plan.lateral, left, context, batch_size)
+                for frame in frames:
+                    if plan.where is None or evaluate(plan.where, frame) is True:
+                        accepted.append(frame)
         groups = group_rows(accepted,
                             lambda frame: tuple(evaluate(e, frame) for e in plan.group_by),
                             plan.shape)
@@ -53,3 +58,25 @@ class QueryExecutor:
                 continue
             output.append(tuple(evaluate(expr, frame, members) for expr in plan.select))
         return output
+
+    def expand(self, lateral, left, context, batch_size=128):
+        """Evaluate the right query once for this left occurrence.
+
+        Returns combined frames carrying the left slots plus the right output
+        slots, in left occurrence order then right final row order.  Null
+        extension happens only after the final right relation is known.
+        """
+        right_rows = self.execute(lateral.plan, batch_size, context.enter(left))
+        left_values = dict(left.values)
+        if not right_rows:
+            if lateral.mode == "inner":
+                return ()
+            values = dict(left_values)
+            values.update((identity, None) for identity in lateral.column_ids)
+            return (RowFrame(left.scope_id, (left.occurrence, ("null",)), values),)
+        frames = []
+        for index, row in enumerate(right_rows):
+            values = dict(left_values)
+            values.update(zip(lateral.column_ids, row))
+            frames.append(RowFrame(left.scope_id, (left.occurrence, index), values))
+        return tuple(frames)

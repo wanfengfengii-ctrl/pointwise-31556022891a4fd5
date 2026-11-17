@@ -47,6 +47,24 @@ class OutputColumn:
 
 
 @dataclass(frozen=True)
+class LateralPlan:
+    """Frozen right-hand expansion for one top-level query.
+
+    outputs are the exposed (possibly nullable-widened) right columns; the
+    nested plan keeps the right query's own original types and semantics.
+    column_ids are the combined-frame slots owned by the right output, kept
+    distinct from the left relation's column identities even when both sides
+    read the same bound source.
+    """
+
+    alias: str
+    mode: str
+    outputs: tuple[OutputColumn, ...]
+    column_ids: tuple[str, ...]
+    plan: object
+
+
+@dataclass(frozen=True)
 class LogicalPlan:
     binding_id: int
     scope_id: str
@@ -61,6 +79,7 @@ class LogicalPlan:
     having: Expression | None
     shape: str
     document: dict
+    lateral: LateralPlan | None = None
 
 
 def has_aggregate(expr):

@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
-from .query_model import (LogicalPlan, Expression, ColumnRef, AggregateSpec,
-                          OutputColumn, QueryError)
+from .query_model import (LogicalPlan, LateralPlan, Expression, ColumnRef,
+                          AggregateSpec, OutputColumn, QueryError)
 from .schemas import pack_value, unpack_value
 
 
@@ -25,8 +25,22 @@ def _unpack_tree(value):
     return value
 
 
+def _strip_null_lateral(value):
+    """Drop structural ``lateral: null`` members anywhere in a plan tree.
+
+    asdict recurses through scalar subplans as well, so the cleanup must too.
+    Persisted V1 plans predate the member and must stay byte-identical.
+    """
+    if type(value) is dict:
+        return {key: _strip_null_lateral(v) for key, v in value.items()
+                if not (key == "lateral" and v is None)}
+    if type(value) in (list, tuple):
+        return [_strip_null_lateral(v) for v in value]
+    return value
+
+
 def encode_plan(plan):
-    return json.dumps({"version": 1, "plan": _pack_tree(asdict(plan))},
+    return json.dumps({"version": 1, "plan": _pack_tree(_strip_null_lateral(asdict(plan)))},
                       ensure_ascii=True, sort_keys=True, separators=(",", ":"))
 
 
@@ -43,6 +57,15 @@ def decode_plan(body):
         data["query"] = plan(data["query"]) if data["query"] is not None else None
         return Expression(**data)
 
+    def lateral(data):
+        if data is None:
+            return None
+        data = dict(data)
+        data["outputs"] = tuple(OutputColumn(**c) for c in data["outputs"])
+        data["column_ids"] = tuple(data["column_ids"])
+        data["plan"] = plan(data["plan"])
+        return LateralPlan(**data)
+
     def plan(data):
         data = dict(data)
         for key in ("select", "group_by"):
@@ -51,6 +74,7 @@ def decode_plan(body):
         data["having"] = expression(data["having"])
         data["outputs"] = tuple(OutputColumn(**c) for c in data["outputs"])
         data["column_ids"] = tuple(data["column_ids"])
+        data["lateral"] = lateral(data.get("lateral"))
         if data["shape"] not in ("projection", "global", "grouped"):
             raise QueryError("invalid plan shape")
         return LogicalPlan(**data)
