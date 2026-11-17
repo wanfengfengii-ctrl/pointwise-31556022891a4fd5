@@ -1,0 +1,10 @@
+[project]
+name = "river-quality-warehouse"
+version = "1.0.0"
+description = "Offline versioned research sampling quality warehouse"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pointwise]
+verify = ["python3.11", "-B", "-m", "warehouse.workflow", "verify"]
+demo = ["python3.11", "-B", "-m", "warehouse.workflow", "demo"]

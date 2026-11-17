@@ -1,0 +1,22 @@
+{
+  "request_prefix": "river-day-01",
+  "samples": [
+    {"sample_no": 11, "station": "A", "measured_ug_l": 80},
+    {"sample_no": 11, "station": "A", "measured_ug_l": 80},
+    {"sample_no": 12, "station": "B", "measured_ug_l": 40},
+    {"sample_no": 13, "station": "C", "measured_ug_l": null},
+    {"sample_no": 14, "station": "D", "measured_ug_l": 9007199254740993}
+  ],
+  "calibrations_v1": [
+    {"station": "A", "limit_ug_l": 100},
+    {"station": "C", "limit_ug_l": null},
+    {"station": "D", "limit_ug_l": 9007199254740994}
+  ],
+  "calibrations_v2": [
+    {"station": "A", "limit_ug_l": 100},
+    {"station": "C", "limit_ug_l": null},
+    {"station": "D", "limit_ug_l": 9007199254740994},
+    {"station": "B", "limit_ug_l": 50}
+  ],
+  "expected": {"old_ids": [11, 11, 14], "new_ids": [11, 11, 12, 14]}
+}
